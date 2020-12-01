@@ -102,6 +102,7 @@ enum {
 
     cmd_g_dumpTree = 56,
     cmd_g_queryTree = 57,
+    cmd_n_queryTree = 65,
 
     cmd_error = 58,
 
@@ -115,5 +116,5 @@ enum {
 
     cmd_version = 64,
 
-    NUMBER_OF_COMMANDS = 65
+    NUMBER_OF_COMMANDS = 66
 };

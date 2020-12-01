@@ -1313,9 +1313,32 @@ template <bool realtime> void g_query_tree(int node_id, bool flag, endpoint_ptr 
             movable_array<char> message(p.Size(), data.c_array());
             cmd_dispatcher<realtime>::fire_message(endpoint, std::move(message));
             return;
-        } catch (...) {
-            max_msg_size *= 2; /* if we run out of memory, retry with doubled memory resources */
-        }
+        } catch (...) { max_msg_size *= 2; /* if we run out of memory, retry with doubled memory resources */ }
+    }
+}
+
+template <bool realtime> void n_query_tree(int node_id, bool flag, endpoint_ptr endpoint) {
+    server_node* node = find_node(node_id);
+    if (!node)
+        return;
+
+    size_t max_msg_size = 1 << 16;
+    for (;;) {
+        try {
+            if (max_msg_size > 1 << 22)
+                return;
+
+            sized_array<char, rt_pool_allocator<char>> data(max_msg_size);
+
+            osc::OutboundPacketStream p(data.c_array(), max_msg_size);
+            p << osc::BeginMessage("/n_queryTree.reply") << (flag ? 1 : 0);
+            g_query_tree_fill_node(p, flag, *node);
+            p << osc::EndMessage;
+
+            movable_array<char> message(p.Size(), data.c_array());
+            cmd_dispatcher<realtime>::fire_message(endpoint, std::move(message));
+            return;
+        } catch (...) { max_msg_size *= 2; /* if we run out of memory, retry with doubled memory resources */ }
     }
 }
 
@@ -1327,9 +1350,19 @@ template <bool realtime> void handle_g_queryTree(ReceivedMessage const& msg, end
             osc::int32 id, flag;
             args >> id >> flag;
             g_query_tree<realtime>(id, flag, endpoint);
-        } catch (std::exception& e) {
-            log_printf("exception in handle_g_queryTree: %s\n", e.what());
-        }
+        } catch (std::exception& e) { log_printf("exception in handle_g_queryTree: %s\n", e.what()); }
+    }
+}
+
+template <bool realtime> void handle_n_queryTree(ReceivedMessage const& msg, endpoint_ptr endpoint) {
+    osc::ReceivedMessageArgumentStream args = msg.ArgumentStream();
+
+    while (!args.Eos()) {
+        try {
+            osc::int32 id, flag;
+            args >> id >> flag;
+            n_query_tree<realtime>(id, flag, endpoint);
+        } catch (std::exception& e) { log_printf("exception in handle_n_queryTree: %s\n", e.what()); }
     }
 }
 
@@ -3035,6 +3068,10 @@ void sc_osc_handler::handle_message_int_address(ReceivedMessage const& message, 
         handle_g_queryTree<realtime>(message, endpoint);
         break;
 
+    case cmd_n_queryTree:
+        handle_n_queryTree<realtime>(message, endpoint);
+        break;
+
     case cmd_g_dumpTree:
         handle_g_dumpTree(message);
         break;
@@ -3326,6 +3363,11 @@ void dispatch_node_commands(const char* address, ReceivedMessage const& message,
 
     if (strcmp(address + 3, "trace") == 0) {
         handle_n_trace(message);
+        return;
+    }
+
+    if (strcmp(address + 3, "queryTree") == 0) {
+        handle_n_queryTree<realtime>(message, endpoint);
         return;
     }
 }
